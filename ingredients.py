@@ -2,11 +2,6 @@ import os
 import bs4
 import json
 import httpx
-from deta import Deta
-
-
-deta = Deta()
-db = deta.Base("ingredients-stats")
 
 
 # ----------------------------------------
@@ -47,27 +42,6 @@ def scan(url):
         for ingredient in ingredients:
             with open(f"ingredients/{category}/{ingredient}", "r") as f:
                 ingredient_data = json.loads(f.read())
-            
-            
-            # ----- STATS -----
-            # increment total scans for each ingredient
-            db_ingredient = db.get(ingredient.replace(".json", ""))
-            if db_ingredient == None:
-                try:
-                    db.insert(key=ingredient.replace(".json", ""), data={
-                        "total_scans": 1,
-                        "matching_scans": 0
-                    })
-                except Exception:
-                    # Deta hasn't defined a specific exception for this error
-                    # just ignore it
-                    pass
-            else:
-                db.update(key=ingredient.replace(".json", ""), updates={
-                    "total_scans": db_ingredient["total_scans"] + 1
-                })
-            # -----------------
-            
             
             for tag_check in ingredient_data["checks"]["tags"]:
                 tags = soup.find_all(tag_check["tag"])

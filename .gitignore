@@ -166,3 +166,4 @@ cython_debug/
 test.py
 requester.py
 requests/
+README.md

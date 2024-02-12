@@ -1,7 +1,6 @@
 import json
 import httpx
 import uvicorn
-from deta import Deta
 from typing import Optional
 from fastapi import FastAPI, Response, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse, RedirectResponse
@@ -11,11 +10,6 @@ from urllib.parse import urlparse
 # local imports
 import ingredients
 
-
-deta = Deta()
-
-db = deta.Base("ingredients-stats")
-cache_db = deta.Base("ingredients-cache")
 
 app = FastAPI(
     title="Ingredients – API",
@@ -62,21 +56,6 @@ def get_scan(url: str, includeCategories: Optional[bool] = False):
     r = urlparse(url)
     parsed_url = r.scheme + "://" + r.netloc.split(":")[0] + r.path
     
-    # ----- CACHE -----
-    # request data from cache
-    try:
-        cache_data = cache_db.get(key=url)
-        if cache_data != None:
-            if cache_data["categories"].get("other"):
-                # move "other" to the end of the dict
-                cache_data["categories"]["other"] = cache_data["categories"].pop("other")
-            return cache_data
-    except Exception:
-        # Deta hasn't defined a specific exception for this error
-        # just ignore it
-        pass
-    # -----------------
-    
     try:        
         data = ingredients.scan(parsed_url)
         
@@ -100,28 +79,12 @@ def get_scan(url: str, includeCategories: Optional[bool] = False):
                         ingredient_data = json.loads(f.read())
                         
                     ingredient_name = ingredient.split("/")[1].replace(".json", "")
-                        
-                    # ----- STATS -----
-                    # increment matching scans for each ingredient
-                    db_ingredient = db.get(ingredient_name)
-                    
-                    try:
-                        db.update(key=ingredient_name, updates={
-                            "matching_scans": int(db_ingredient["matching_scans"]) + 1
-                        })
-                    except Exception:
-                        # Deta hasn't defined a specific exception for this error
-                        # just ignore it
-                        pass
-                    # -----------------
-                    
                     return_data["matches"][ingredient.split("/")[0]].append(
                         {
                             "id": ingredient_name,
                             "name": ingredient_data["name"],
                             "description": ingredient_data["description"],
                             "icon": ingredient_data["icon"],
-                            "match_percentage": round(((db_ingredient["matching_scans"] + 1) / db_ingredient["total_scans"]) * 100, 1)
                         }
                     )
         
@@ -129,24 +92,13 @@ def get_scan(url: str, includeCategories: Optional[bool] = False):
             with open("ingredients/categories.json", "r") as f:
                 return_data["categories"] = json.loads(f.read())
         
-        # ----- CACHE -----
-        # add data to cache
-        # expiry: 15 minutes (900 seconds)
-        try:
-            cache_db.put(key=url, data=return_data, expire_in=900)
-        except Exception:
-            # Deta hasn't defined a specific exception for this error
-            # just ignore it
-            pass
-        # -----------------
-                
         return return_data
     except httpx.InvalidURL as e:
         raise HTTPException(status_code=400, detail=str(e))
     except httpx.RequestError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except:
-        raise HTTPException(status_code=500, detail=f"Unknown error")
+        raise HTTPException(status_code=500, detail="Unknown error")
         
         
 @app.get("/icon/{icon}")
@@ -169,4 +121,4 @@ def get_icon(icon: str, response: Response):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8084)
